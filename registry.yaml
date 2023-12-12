@@ -1,0 +1,82 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mirror-docker-io
+  namespace: kube-system
+spec:
+  selector:
+    app: mirror-docker-io
+  ports:
+  - port: 5000
+    targetPort: 5000
+  externalIPs:
+    - "172.18.255.200"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mirror-docker-io
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: mirror-docker-io
+  template:
+    metadata:
+      labels:
+        app: mirror-docker-io
+    spec:
+      containers:
+      - name: registry
+        volumeMounts:
+          - mountPath: /var/lib/registry
+            name: registry
+          - mountPath: /etc/docker/registry
+            name: config
+        image: registry
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 5000
+      volumes:
+        - name: config
+          configMap:
+            name: mirror-docker-io-config
+        - name: registry
+          persistentVolumeClaim:
+            claimName: mirror-docker-io
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mirror-docker-io
+  namespace: kube-system
+spec:
+  resources:
+    requests:
+      storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mirror-docker-io-config
+  namespace: kube-system
+data:
+  config.yml: |
+    version: 0.1
+    http:
+      addr: 0.0.0.0:5000
+    proxy:
+      remoteurl: https://registry-1.docker.io
+    storage:
+      filesystem:
+        rootdirectory: /var/lib/registry
+        maxthreads: 100
+      delete:
+        enabled: true
